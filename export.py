@@ -131,6 +131,18 @@ def export_onnx(model, im, file, opset, train, dynamic, simplify, prefix=colorst
 
     LOGGER.info(f'\n{prefix} starting export with onnx {onnx.__version__}...')
     f = file.with_suffix('.onnx')
+    class ModelWrapper(torch.nn.Module):
+        def __init__(self, model):
+            super().__init__()
+            self.model = model
+
+        def forward(self, x):
+            x = self.model(x)
+            detections = x[0]
+            proto = x[1][1]
+            return detections, proto
+
+    model = ModelWrapper(model)
 
     torch.onnx.export(
         model.cpu() if dynamic else model,  # --dynamic only compatible with cpu
@@ -141,7 +153,7 @@ def export_onnx(model, im, file, opset, train, dynamic, simplify, prefix=colorst
         training=torch.onnx.TrainingMode.TRAINING if train else torch.onnx.TrainingMode.EVAL,
         do_constant_folding=not train,
         input_names=['images'],
-        output_names=['output'],
+        output_names=['output', 'proto'],
         dynamic_axes={
             'images': {
                 0: 'batch',
@@ -149,7 +161,8 @@ def export_onnx(model, im, file, opset, train, dynamic, simplify, prefix=colorst
                 3: 'width'},  # shape(1,3,640,640)
             'output': {
                 0: 'batch',
-                1: 'anchors'}  # shape(1,25200,85)
+                1: 'anchors',
+            }  # shape(1,25200,85)
         } if dynamic else None)
 
     # Checks
@@ -258,7 +271,13 @@ def export_engine(model, im, file, half, dynamic, simplify, workspace=4, verbose
         raise RuntimeError(f'failed to load ONNX file: {onnx}')
 
     inputs = [network.get_input(i) for i in range(network.num_inputs)]
+    for i in inputs:
+        i.dtype = trt.float32
+
     outputs = [network.get_output(i) for i in range(network.num_outputs)]
+    for i in outputs:
+        i.dtype = trt.float32
+
     LOGGER.info(f'{prefix} Network Description:')
     for inp in inputs:
         LOGGER.info(f'{prefix}\tinput "{inp.name}" with shape {inp.shape} and dtype {inp.dtype}')

@@ -1,0 +1,22 @@
+version: "3.9"
+services:
+  export:
+    container_name: yolov7_docker
+    build:
+      context: .
+      shm_size: 16gb
+      dockerfile: Dockerfile
+
+    volumes:
+      - ./:/workspace/yolov7
+    image: yolov7_docker:latest
+    working_dir: /workspace/yolov7
+    tty: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    command: python export.py --latest-weights --img 640 --batch 8 --device 0 --half --simplify --include engine

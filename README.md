@@ -151,6 +151,11 @@ python3 segment/train.py --data data/custom.yaml \
 python3 segment/predict.py --weights "runs/yolov7-seg/exp/weights/best.pt" --source "videopath.mp4"
 ```
 
+## Export latest best weights to TensorRT and ONNX
+```
+docker-compose up
+```
+
 ## RESULTS
 <table>
   <tr>

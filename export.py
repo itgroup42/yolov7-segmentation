@@ -135,6 +135,8 @@ def export_onnx(model, im, file, opset, train, dynamic, simplify, prefix=colorst
         def __init__(self, model):
             super().__init__()
             self.model = model
+            self.stride = model.stride
+            self.names = model.names
 
         def forward(self, x):
             x = self.model(x)
@@ -243,6 +245,7 @@ def export_engine(model, im, file, half, dynamic, simplify, workspace=4, verbose
         import tensorrt as trt
 
     if trt.__version__[0] == '7':  # TensorRT 7 handling https://github.com/ultralytics/yolov5/issues/6012
+        assert False, 'TensorRT 7 is not supported, please install TensorRT 8+'
         grid = model.model[-1].anchor_grid
         model.model[-1].anchor_grid = [a[..., :1, :1, :] for a in grid]
         export_onnx(model, im, file, 12, False, dynamic, simplify)  # opset 12
@@ -477,6 +480,7 @@ def run(
         topk_all=100,  # TF.js NMS: topk for all classes to keep
         iou_thres=0.45,  # TF.js NMS: IoU threshold
         conf_thres=0.25,  # TF.js NMS: confidence threshold
+        **kwargs,  # additional arguments
 ):
     t = time.time()
     include = [x.lower() for x in include]  # to lowercase
@@ -594,6 +598,7 @@ def parse_opt():
     parser.add_argument('--topk-all', type=int, default=100, help='TF.js NMS: topk for all classes to keep')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='TF.js NMS: IoU threshold')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='TF.js NMS: confidence threshold')
+    parser.add_argument('--latest-weights', action='store_true', help='Automatically use latest weights')
     parser.add_argument('--include',
                         nargs='+',
                         default=['torchscript'],
@@ -604,6 +609,14 @@ def parse_opt():
 
 
 def main(opt):
+    if opt.latest_weights:
+        assert opt.weights == ROOT / 'yolov5s.pt', 'Cannot use --latest-weights with --weights'
+        weights = list(ROOT.glob('./runs/train-seg/yolov7-*/weights/best.pt'))  # find last.pt in all exp* folders
+        assert len(weights) > 0, 'No training results found'
+        weights.sort(key=os.path.getmtime)  # sort by last modified time
+        opt.weights = weights[-1]  # use most recent
+        LOGGER.info(f'Using latest weights {opt.weights}')
+
     for opt.weights in (opt.weights if isinstance(opt.weights, list) else [opt.weights]):
         run(**vars(opt))
 
